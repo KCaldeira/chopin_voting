@@ -371,20 +371,30 @@ def favorite_contributions_for_candidate(scores: pd.DataFrame,
 
 
 # ============================================
-# 8. Example usage
+# 8. Workflow control function
 # ============================================
 
-if __name__ == "__main__":
-    # Adjust path to your CSV file
-    csv_path = "Chopin_Stage3_scores_NA.csv"
-    candidate_to_inspect = "Eric Lu"   # you can change this to any contestant name
+def analyze_voting_file(csv_path: str, candidate_to_inspect: str = None):
+    """
+    Run complete voting analysis on a single CSV file.
+
+    Args:
+        csv_path: Path to the CSV file containing voting data
+        candidate_to_inspect: Optional candidate name for detailed analysis
+
+    Returns:
+        dict containing all analysis results
+    """
+    print(f"\n{'=' * 80}")
+    print(f"Analyzing: {csv_path}")
+    print(f"{'=' * 80}")
 
     contestants, judges, scores, df = load_scores(csv_path)
 
     # --- Pairwise / Condorcet ---
     wins, ties, comps = compute_pairwise(scores, contestants, judges)
     copeland_ranking, condorcet = copeland_scores(wins, comps, contestants)
-    print("Copeland ranking (pairwise):")
+    print("\nCopeland ranking (pairwise):")
     for name, score in copeland_ranking:
         print(f"  {name}: {score}")
     print("Condorcet winner(s):", condorcet)
@@ -421,18 +431,175 @@ if __name__ == "__main__":
     print(jt.to_string(index=False))
 
     # --- Diagnostics: per-judge contributions for one candidate ---
-    print(f"\nPer-judge favorite contributions for '{candidate_to_inspect}':")
-    contrib_df = favorite_contributions_for_candidate(scores, df, judges, candidate_to_inspect)
-    # Show with some rounding for readability
-    contrib_df_round = contrib_df.copy()
-    contrib_df_round["CandidateScore"] = contrib_df_round["CandidateScore"].round(2)
-    contrib_df_round["FractionalShare"] = contrib_df_round["FractionalShare"].round(3)
-    contrib_df_round["EqualShare"] = contrib_df_round["EqualShare"].round(3)
-    print(contrib_df_round.to_string(index=False))
+    if candidate_to_inspect and candidate_to_inspect in contestants:
+        print(f"\nPer-judge favorite contributions for '{candidate_to_inspect}':")
+        contrib_df = favorite_contributions_for_candidate(scores, df, judges, candidate_to_inspect)
+        # Show with some rounding for readability
+        contrib_df_round = contrib_df.copy()
+        contrib_df_round["CandidateScore"] = contrib_df_round["CandidateScore"].round(2)
+        contrib_df_round["FractionalShare"] = contrib_df_round["FractionalShare"].round(3)
+        contrib_df_round["EqualShare"] = contrib_df_round["EqualShare"].round(3)
+        print(contrib_df_round.to_string(index=False))
 
-    # Also show the totals for that candidate
-    total_frac = contrib_df["FractionalShare"].sum()
-    total_equal = contrib_df["EqualShare"].sum()
-    print(f"\nTotals for '{candidate_to_inspect}':")
-    print(f"  Fractional favorite total: {total_frac:.3f}")
-    print(f"  Equal-count favorite total: {total_equal:.1f}")
+        # Also show the totals for that candidate
+        total_frac = contrib_df["FractionalShare"].sum()
+        total_equal = contrib_df["EqualShare"].sum()
+        print(f"\nTotals for '{candidate_to_inspect}':")
+        print(f"  Fractional favorite total: {total_frac:.3f}")
+        print(f"  Equal-count favorite total: {total_equal:.1f}")
+
+    # Return results for potential further processing
+    return {
+        'csv_path': csv_path,
+        'contestants': contestants,
+        'judges': judges,
+        'copeland_ranking': copeland_ranking,
+        'condorcet': condorcet,
+        'irv_winner': irv_winner,
+        'irv_eliminations': irv_elims,
+        'bottom_winner': bottom_winner,
+        'bottom_eliminations': bottom_elims,
+        'favorites_fractional': fav_frac,
+        'favorites_equal': fav_equal,
+        'judge_top_summary': jt
+    }
+
+
+# ============================================
+# 9. Excel report generation
+# ============================================
+
+def generate_excel_report(results: list, output_path: str):
+    """
+    Generate Excel report with multiple sheets from analysis results.
+
+    Args:
+        results: List of result dictionaries from analyze_voting_file()
+        output_path: Path to output Excel file
+    """
+    import os
+    from datetime import datetime
+
+    with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
+        # Create summary sheet first
+        summary_data = []
+        for result in results:
+            filename = os.path.basename(result['csv_path'])
+            stage_name = filename.replace('_scores_NA.csv', '').replace('Chopin_', '')
+
+            summary_data.append({
+                'Stage': stage_name,
+                'Copeland Winner': result['copeland_ranking'][0][0],
+                'Copeland Score': result['copeland_ranking'][0][1],
+                'Condorcet Winner': result['condorcet'][0] if result['condorcet'] else 'None',
+                'IRV Winner': result['irv_winner'],
+                'Bottom-Elimination Winner': result['bottom_winner'],
+                'Num Contestants': len(result['contestants']),
+                'Num Judges': len(result['judges'])
+            })
+
+        summary_df = pd.DataFrame(summary_data)
+        summary_df.to_excel(writer, sheet_name='Summary', index=False)
+
+        # Create sheets for each stage
+        for result in results:
+            filename = os.path.basename(result['csv_path'])
+            stage_name = filename.replace('_scores_NA.csv', '').replace('Chopin_', '')
+            # Excel sheet names limited to 31 chars
+            sheet_prefix = stage_name[:20] if len(stage_name) > 20 else stage_name
+
+            # 1. Copeland Rankings
+            copeland_df = pd.DataFrame(
+                result['copeland_ranking'],
+                columns=['Contestant', 'Copeland Score']
+            )
+            copeland_df.to_excel(writer, sheet_name=f'{sheet_prefix}_Copeland', index=False)
+
+            # 2. IRV Results
+            irv_data = [{
+                'Winner': result['irv_winner'],
+                'Method': 'IRV (Instant Runoff Voting)'
+            }]
+            irv_df = pd.DataFrame(irv_data)
+            irv_elim_df = pd.DataFrame(result['irv_eliminations'])
+            irv_combined = pd.concat([irv_df, pd.DataFrame([{}]), irv_elim_df], ignore_index=True)
+            irv_combined.to_excel(writer, sheet_name=f'{sheet_prefix}_IRV', index=False)
+
+            # 3. Bottom Elimination Results
+            bottom_data = [{
+                'Winner': result['bottom_winner'],
+                'Method': 'Bottom Elimination (Reverse Runoff)'
+            }]
+            bottom_df = pd.DataFrame(bottom_data)
+            bottom_elim_df = pd.DataFrame(result['bottom_eliminations'])
+            bottom_combined = pd.concat([bottom_df, pd.DataFrame([{}]), bottom_elim_df], ignore_index=True)
+            bottom_combined.to_excel(writer, sheet_name=f'{sheet_prefix}_Bottom', index=False)
+
+            # 4. Favorites (combined fractional and equal)
+            fav_data = []
+            for contestant in result['contestants']:
+                fav_data.append({
+                    'Contestant': contestant,
+                    'Fractional Favorites': result['favorites_fractional'][contestant],
+                    'Equal Favorites': result['favorites_equal'][contestant]
+                })
+            fav_df = pd.DataFrame(fav_data)
+            fav_df = fav_df.sort_values('Fractional Favorites', ascending=False)
+            fav_df.to_excel(writer, sheet_name=f'{sheet_prefix}_Favorites', index=False)
+
+            # 5. Judge Summary
+            result['judge_top_summary'].to_excel(
+                writer,
+                sheet_name=f'{sheet_prefix}_Judges',
+                index=False
+            )
+
+    print(f"\nExcel report saved to: {output_path}")
+
+
+# ============================================
+# 10. Example usage
+# ============================================
+
+if __name__ == "__main__":
+    import glob
+    import os
+    from datetime import datetime
+
+    # Process all CSV files in data/input directory
+    input_dir = "./data/input"
+    output_dir = "./data/output"
+    csv_files = sorted(glob.glob(os.path.join(input_dir, "*.csv")))
+
+    if not csv_files:
+        print(f"No CSV files found in {input_dir}")
+    else:
+        # Optional: specify a candidate to inspect across all files
+        candidate_to_inspect = "Eric Lu"  # Change this or set to None
+
+        results = []
+        for csv_path in csv_files:
+            result = analyze_voting_file(csv_path, candidate_to_inspect)
+            results.append(result)
+
+        # Summary across all files
+        print(f"\n{'=' * 80}")
+        print("SUMMARY ACROSS ALL STAGES")
+        print(f"{'=' * 80}")
+        for result in results:
+            filename = os.path.basename(result['csv_path'])
+            print(f"\n{filename}:")
+            print(f"  Copeland winner: {result['copeland_ranking'][0][0]}")
+            print(f"  Condorcet winner: {result['condorcet'] if result['condorcet'] else 'None'}")
+            print(f"  IRV winner: {result['irv_winner']}")
+            print(f"  Bottom-elimination winner: {result['bottom_winner']}")
+
+        # Generate Excel report with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        excel_filename = f"chopin_voting_analysis_{timestamp}.xlsx"
+        excel_path = os.path.join(output_dir, excel_filename)
+
+        # Ensure output directory exists
+        os.makedirs(output_dir, exist_ok=True)
+
+        generate_excel_report(results, excel_path)
