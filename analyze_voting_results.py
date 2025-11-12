@@ -393,13 +393,12 @@ def fptp_contributions_for_candidate(scores: pd.DataFrame,
 # 8. Workflow control function
 # ============================================
 
-def analyze_voting_file(csv_path: str, candidate_to_inspect: str = None):
+def analyze_voting_file(csv_path: str):
     """
     Run complete voting analysis on a single CSV file.
 
     Args:
         csv_path: Path to the CSV file containing voting data
-        candidate_to_inspect: Optional candidate name for detailed analysis
 
     Returns:
         dict containing all analysis results
@@ -443,22 +442,6 @@ def analyze_voting_file(csv_path: str, candidate_to_inspect: str = None):
     print("\nJudge top-score summary:")
     jt = judge_top_summary(scores, judges)
     print(jt.to_string(index=False))
-
-    # --- Diagnostics: per-judge contributions for one candidate ---
-    if candidate_to_inspect and candidate_to_inspect in contestants:
-        print(f"\nPer-judge First Past The Post contributions for '{candidate_to_inspect}':")
-        contrib_df = fptp_contributions_for_candidate(scores, df, judges, candidate_to_inspect)
-        # Show with some rounding for readability
-        contrib_df_round = contrib_df[['Judge', 'JudgeMaxScore', 'CandidateScore',
-                                       'NumContestantsAtMax', 'FractionalShare']].copy()
-        contrib_df_round["CandidateScore"] = contrib_df_round["CandidateScore"].round(2)
-        contrib_df_round["FractionalShare"] = contrib_df_round["FractionalShare"].round(3)
-        print(contrib_df_round.to_string(index=False))
-
-        # Also show the totals for that candidate
-        total_frac = contrib_df["FractionalShare"].sum()
-        print(f"\nTotals for '{candidate_to_inspect}':")
-        print(f"  Fractional FPTP total: {total_frac:.3f}")
 
     # Return results for potential further processing
     return {
@@ -939,12 +922,9 @@ if __name__ == "__main__":
     if not csv_files:
         print(f"No CSV files found in {input_dir}")
     else:
-        # Optional: specify a candidate to inspect across all files
-        candidate_to_inspect = "Eric Lu"  # Change this or set to None
-
         results = []
         for csv_path in csv_files:
-            result = analyze_voting_file(csv_path, candidate_to_inspect)
+            result = analyze_voting_file(csv_path)
             results.append(result)
 
         # Summary across all files

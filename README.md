@@ -43,7 +43,8 @@ pip install -r requirements.txt
 
 Edit the `__main__` section in `analyze_voting_results.py` to specify:
 - `csv_path`: Path to your CSV file
-- `candidate_to_inspect`: Name of candidate for detailed analysis
+- `inspect_all_candidates`: Set to `True` to inspect all candidates (default), or `False` to specify a manual list
+- `candidates_to_inspect`: List of candidate names for detailed analysis (only used if `inspect_all_candidates` is `False`)
 
 Then run:
 
@@ -140,19 +141,34 @@ chopin_voting/
 
 ## Output
 
-Running the script generates a timestamped Excel workbook in `./data/output/` with:
+Running the script generates timestamped Excel workbooks in `./data/output/`:
 
-**Summary Sheet:**
-- Overview of all stages with winners from each voting method
-- Stage transition metrics showing disagreement scores for each method
+### Main Analysis Reports
 
-**Individual Stage Sheets** (Stage1, Stage2, Stage3, FinalStage):
-Each sheet contains 5 tables side-by-side:
-1. **Copeland Ranking** - Pairwise scores with Advanced column
-2. **IRV Results** - Full ranking from winner to last eliminated, with votes and Advanced column
-3. **Bottom Elimination** - Full ranking with bottom scores and Advanced column
-4. **First Past The Post** - FPTP scores with Advanced column
-5. **Judge Summary** - Judge scoring statistics (min, max, mean, median, std dev)
+**`chopin_voting_analysis_{timestamp}.xlsx`** - Standard analysis:
+- **Summary Sheet:** Overview of all stages with winners from each voting method and stage transition metrics
+- **Individual Stage Sheets** (Stage1, Stage2, Stage3, FinalStage):
+  Each sheet contains 5 tables side-by-side:
+  1. **Copeland Ranking** - Pairwise scores with Advanced column
+  2. **IRV Results** - Full ranking from winner to last eliminated, with votes and Advanced column
+  3. **Bottom Elimination** - Full ranking with bottom scores and Advanced column
+  4. **First Past The Post** - FPTP scores with Advanced column
+  5. **Judge Summary** - Judge scoring statistics (min, max, mean, median, std dev)
+
+**`chopin_cumulative_voting_analysis_{timestamp}.xlsx`** - Cumulative analysis including judges from previous stages
+
+### Candidate Detail Reports
+
+**`candidates_{timestamp}.xlsx`** - Detailed per-candidate analysis:
+- One sheet per candidate showing their per-judge First Past The Post contributions across all stages
+- Each sheet includes:
+  - Judge name and their maximum score for that stage
+  - Candidate's score from each judge
+  - Number of contestants tied at maximum score
+  - Fractional share awarded (1 point split among tied top candidates)
+  - **TOTAL rows** showing candidate's fractional FPTP total for each stage
+
+**`candidates_cumulative_{timestamp}.xlsx`** - Same as above but with cumulative judge data
 
 ## Available Functions
 
@@ -175,8 +191,9 @@ Each sheet contains 5 tables side-by-side:
 - `analyze_stage_transitions(all_results)`: Analyze advancement patterns across stages and calculate disagreement metrics for each voting method
 
 ### Workflow and Reporting
-- `analyze_voting_file(csv_path, candidate_to_inspect)`: Complete analysis workflow for a single stage
+- `analyze_voting_file(csv_path, candidates_to_inspect)`: Complete analysis workflow for a single stage
 - `generate_excel_report(results, output_path, stage_transitions)`: Generate comprehensive Excel report with all analysis
+- `generate_candidates_report(results, candidates, output_path)`: Generate detailed per-candidate Excel report with FPTP contributions across all stages
 
 ### Diagnostics
 - `judge_top_summary(scores, judges)`: Summary of each judge's scoring patterns (min, max, mean, median, std dev, top score frequency)
@@ -193,8 +210,9 @@ The script produces console output for each stage:
 4. Bottom-elimination winner with complete elimination order
 5. First Past The Post scores (fractional method)
 6. Judge top-score patterns with statistical summaries
-7. Detailed per-judge FPTP contributions for specified candidate (optional)
+7. Detailed per-judge FPTP contributions for each candidate (when `candidates_to_inspect` is specified)
 8. Summary table across all stages
+9. Report generation confirmation with file paths
 
 ## Dependencies
 
@@ -210,3 +228,5 @@ The script produces console output for each stage:
 - Stage files are automatically sorted chronologically (Stage1 → Stage2 → Stage3 → FinalStage)
 - Excel reports use timestamped filenames to prevent overwriting previous analyses
 - The "Advanced" column appears only in stages that have a subsequent stage (not in FinalStage)
+- By default, `inspect_all_candidates = True` generates detailed reports for all candidates
+- Candidate detail reports show per-judge FPTP contributions across all stages, making it easy to see how each judge scored a specific candidate
