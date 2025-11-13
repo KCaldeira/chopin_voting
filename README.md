@@ -41,14 +41,13 @@ pip install -r requirements.txt
 
 ### Basic Usage
 
-Edit the `__main__` section in `analyze_voting_results.py` to specify:
-- `csv_path`: Path to your CSV file
-- `candidates_to_inspect`: List of candidate names for detailed analysis
+The scripts default to analyzing CSV files in `./data/input/`. If your data files are in a different location, edit the `__main__` section in each script to specify the correct paths.
 
 Then run:
 
 ```bash
 python analyze_voting_results.py
+python analyze_normalized_means.py
 ```
 
 ### Programmatic Usage
@@ -207,6 +206,14 @@ The script produces console output for each stage:
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+The MIT License is a permissive open-source license that allows you to:
+- **Use** this software freely for any purpose (commercial or non-commercial)
+- **Modify** the code to suit your needs
+- **Distribute** copies of the original or modified software
+- **Sublicense** and incorporate it into your own projects
+
+The only requirement is that you include the original copyright notice and license in any copies or substantial portions of the software.
 
 ## Notes
 
